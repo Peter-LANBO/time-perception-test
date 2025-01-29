@@ -5,7 +5,8 @@
   <title>Calibration + Circle Test Demo (Modified)</title>
   <style>
     body {
-      margin: 0; padding: 0;
+      margin: 0; 
+      padding: 0;
       font-family: "Hiragino Kaku Gothic Pro", sans-serif;
       background: #f0f0f0;
     }
@@ -34,23 +35,25 @@
     .btn:hover {
       background: #2980b9;
     }
+    /* キャンバスを包むコンテナ */
     .canvas-box {
+      display: inline-block; /* canvas に合わせてサイズが自動調整される */
       border: 1px solid #ccc;
       margin: 10px 0;
       position: relative;
     }
+    /* 各ステップの表示制御 */
     .step {
       display: none;
     }
     .step.active {
       display: block;
     }
+    /* キャリブレーションやCircle用キャンバス共通のスタイル */
     canvas {
       background: #fff;
       cursor: crosshair;
-      width: 600px;   /* 表示上のサイズ */
-      height: 400px;  /* 表示上のサイズ */
-      display: block;
+      display: block; /* ブロック要素にし、余白をなくす */
     }
     .note {
       background: #f8f9fa;
@@ -75,6 +78,7 @@
     select:hover, button:hover {
       background: #2980b9;
     }
+    /* Circle Test用 */
     .a4-sheet {
       display: flex;
       gap: 20px;
@@ -112,6 +116,7 @@
       - 後で2回目のキャリブレーション（Step2）でもう一度同じ操作を行います。
     </p>
     <div class="canvas-box">
+      <!-- 幅600, 高さ400をHTML属性で指定し、CSSでは固定しない -->
       <canvas id="calibCanvas1" width="600" height="400"></canvas>
     </div>
     <button class="btn" id="clearCalib1">やり直し（リセット）</button>
@@ -182,14 +187,14 @@
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script>
 // ========================================================
-//  グローバルな変数や状態管理
+//  グローバル変数・状態管理
 // ========================================================
-let step = 1;                   // 現在のステップ(1→2→3)
-let calibLengths = [null, null];// キャリブレーションの結果(px)
-let mmPerPx = 0;                // px→mm換算係数 (2cm=20mmが何pxに相当するか)
+let step = 1;                    // 現在のステップ(1→2→3)
+let calibLengths = [null, null]; // キャリブレーション結果(px)
+let mmPerPx = 0;                 // px→mm換算係数 (2cm=20mmが何pxに相当するか)
 
 // --------------------------------------------------------
-//  STEP切り替え用: 指定したSTEPの要素を表示
+//  STEP切り替え
 // --------------------------------------------------------
 function showStep(nextStep) {
   const steps = [1,2,3];
@@ -200,7 +205,7 @@ function showStep(nextStep) {
 }
 
 // ========================================================
-//  STEP1 & STEP2: キャリブレーションCanvas処理
+//  STEP1 & STEP2: キャリブレーションCanvas
 // ========================================================
 class CalibCanvasManager {
   constructor(canvasId) {
@@ -208,7 +213,7 @@ class CalibCanvasManager {
     this.ctx = this.canvas.getContext('2d');
     this.width = this.canvas.width;
     this.height = this.canvas.height;
-    this.lines = [];      // 引いた線を保持（ここでは1本前提）
+    this.lines = [];      // 引いた線（1本前提）
     this.isDrawing = false;
     this.currentLine = null;
 
@@ -235,7 +240,7 @@ class CalibCanvasManager {
     if(!this.isDrawing) return;
     this.isDrawing = false;
     if(this.currentLine) {
-      // ここでは最新の線だけ保持
+      // 最新の線1本だけ保持
       this.lines = [ this.currentLine ];
       this.currentLine = null;
     }
@@ -251,8 +256,8 @@ class CalibCanvasManager {
   }
 
   redraw() {
-    this.ctx.clearRect(0,0,this.width,this.height);
-    // 線を再描画
+    this.ctx.clearRect(0, 0, this.width, this.height);
+    // すでに描かれた線
     this.lines.forEach(line => {
       this.ctx.beginPath();
       this.ctx.moveTo(line.x1, line.y1);
@@ -261,7 +266,7 @@ class CalibCanvasManager {
       this.ctx.lineWidth = 2;
       this.ctx.stroke();
     });
-    // 現在描画中のライン
+    // 現在ドラッグ中のライン
     if(this.currentLine) {
       this.ctx.beginPath();
       this.ctx.moveTo(this.currentLine.x1, this.currentLine.y1);
@@ -288,7 +293,7 @@ class CalibCanvasManager {
   }
 }
 
-// キャリブレーション用Canvasを2つ準備
+// キャリブ用Canvas
 const calib1 = new CalibCanvasManager("calibCanvas1");
 const calib2 = new CalibCanvasManager("calibCanvas2");
 
@@ -317,11 +322,10 @@ document.getElementById('confirmCalib2').addEventListener('click', ()=>{
   }
   calibLengths[1] = lenPx;
 
-  // 2回の値を比較
-  const ratio = (calibLengths[0] < calibLengths[1])
-    ? (calibLengths[0] / calibLengths[1])
-    : (calibLengths[1] / calibLengths[0]);
-  const percentage = ratio * 100; // 一致度(小さい方 / 大きい方 * 100)
+  // 一致度チェック
+  const smaller = Math.min(calibLengths[0], calibLengths[1]);
+  const larger  = Math.max(calibLengths[0], calibLengths[1]);
+  const percentage = (smaller / larger) * 100;
 
   if(percentage < 95) {
     alert("2回の計測値が95%未満です。もう一度描き直してください。");
@@ -331,14 +335,11 @@ document.getElementById('confirmCalib2').addEventListener('click', ()=>{
     return;
   }
 
-  // 合格: 平均値を取る
+  // 合格 → 平均値を使う
   const avgPx = (calibLengths[0] + calibLengths[1]) / 2;
-  // 2cm(=20mm)がavgPxピクセル
-  mmPerPx = 20.0 / avgPx; // 1pxあたり何mmか
+  mmPerPx = 20.0 / avgPx; // 2cm=20mm
 
   alert(`キャリブレーション完了！ 1pxあたり約${mmPerPx.toFixed(4)}mm です。`);
-  
-  // 次のSTEPへ
   showStep(3);
 });
 
@@ -348,7 +349,9 @@ document.getElementById('confirmCalib2').addEventListener('click', ()=>{
 // ========================================================
 const circleCanvas = document.getElementById("circleCanvas");
 const circleCtx = circleCanvas.getContext("2d");
-const circleSize = 567; // 実際の描画領域に合わせる
+const circleSize = 567; // 描画領域
+
+// 高解像度対応
 let dpr = window.devicePixelRatio || 1;
 circleCanvas.width = circleSize * dpr;
 circleCanvas.height = circleSize * dpr;
@@ -360,7 +363,7 @@ let isDrawingCircle = false;
 let currentCircle = null;
 
 let selectedCircle = null;
-let operationMode = 'none'; // 'none' | 'move' | 'resize'
+let operationMode = 'none';  // 'move' or 'resize'
 let pressTimer = null;
 let pressStartCircle = null;
 let longPressThreshold = 1500; // 1.5秒
@@ -374,7 +377,7 @@ function getCirclePos(e) {
 }
 
 function redrawCircleCanvas() {
-  circleCtx.clearRect(0,0,circleSize,circleSize);
+  circleCtx.clearRect(0, 0, circleSize, circleSize);
   drawGrid();
   drawAllCircles();
   drawPreview();
@@ -383,7 +386,7 @@ function redrawCircleCanvas() {
 function drawGrid() {
   circleCtx.strokeStyle = '#ecf0f1';
   circleCtx.lineWidth = 1;
-  for(let i = 0; i <= circleSize; i += 37.8) {
+  for(let i=0; i<=circleSize; i+=37.8) {
     circleCtx.beginPath();
     circleCtx.moveTo(i,0);
     circleCtx.lineTo(i,circleSize);
@@ -411,8 +414,8 @@ function drawAllCircles() {
       circleCtx.fillText(c.label, c.x, c.y);
     }
 
-    // 選択中サークル(移動orリサイズ中)なら点線
-    if(c === selectedCircle && (operationMode==='move'||operationMode==='resize')) {
+    // 選択中を点線表示
+    if(c === selectedCircle && (operationMode === 'move' || operationMode === 'resize')) {
       circleCtx.save();
       circleCtx.setLineDash([5,3]);
       circleCtx.strokeStyle = '#3498db';
@@ -444,9 +447,9 @@ function isNearEdge(pos, circle) {
   return Math.abs(dist - circle.radius) < 10;
 }
 
-// ----------------- Circle Drawing -----------------
+// 新規円作成 or 既存円操作
 circleCanvas.addEventListener('mousedown', (e)=>{
-  // 新規円作成モード
+  // 新規円？
   if(currentLabel && circles.length < 3) {
     isDrawingCircle = true;
     const pos = getCirclePos(e);
@@ -454,13 +457,11 @@ circleCanvas.addEventListener('mousedown', (e)=>{
     return;
   }
 
-  // 既存円の操作（周辺=resize, 内部=long press move）
-  const pos = getCirclePos(e);
-  
   // リサイズ判定
+  const pos = getCirclePos(e);
   let foundResize = false;
   circles.forEach(c => {
-    if(isNearEdge(pos,c)) {
+    if(isNearEdge(pos, c)) {
       selectedCircle = c;
       operationMode = 'resize';
       circleCanvas.style.cursor = 'nesw-resize';
@@ -469,7 +470,7 @@ circleCanvas.addEventListener('mousedown', (e)=>{
   });
   if(foundResize) return;
 
-  // 内部判定 (長押しでmove)
+  // 内部長押し → move
   let foundInside = null;
   circles.forEach(c => {
     if(isInCircle(pos,c)) {
@@ -500,7 +501,7 @@ circleCanvas.addEventListener('mousemove', (e)=>{
   }
 
   // リサイズ中
-  if(selectedCircle && operationMode==='resize') {
+  if(selectedCircle && operationMode === 'resize') {
     const dx = pos.x - selectedCircle.x;
     const dy = pos.y - selectedCircle.y;
     selectedCircle.radius = Math.sqrt(dx*dx + dy*dy);
@@ -509,14 +510,14 @@ circleCanvas.addEventListener('mousemove', (e)=>{
   }
 
   // 移動中
-  if(selectedCircle && operationMode==='move') {
+  if(selectedCircle && operationMode === 'move') {
     selectedCircle.x = pos.x;
     selectedCircle.y = pos.y;
     redrawCircleCanvas();
     return;
   }
 
-  // 通常時のカーソル判定
+  // 通常時のカーソル
   let hoverCircle = circles.find(c => isNearEdge(pos,c));
   circleCanvas.style.cursor = hoverCircle ? 'nesw-resize' : 'crosshair';
 });
@@ -524,9 +525,9 @@ circleCanvas.addEventListener('mousemove', (e)=>{
 circleCanvas.addEventListener('mouseup', (e)=>{
   // 新規円確定
   if(isDrawingCircle && currentCircle) {
-    if(currentCircle.radius>5) {
+    if(currentCircle.radius > 5) {
       circles.push(currentCircle);
-      // 一度ラベルは消費（1つのラベルで1円想定）
+      // ラベルを消費
       document.getElementById('labelSelector').value = '';
       currentLabel = '';
     }
@@ -536,29 +537,30 @@ circleCanvas.addEventListener('mouseup', (e)=>{
     return;
   }
 
-  // 長押しタイマー解除
+  // 長押しタイマーキャンセル
   if(pressTimer) {
     clearTimeout(pressTimer);
     pressTimer = null;
   }
 
-  // リサイズ/移動終了
-  if(operationMode==='resize' || operationMode==='move') {
+  // リサイズ・移動終了
+  if(operationMode === 'resize' || operationMode === 'move') {
     selectedCircle = null;
     operationMode = 'none';
     circleCanvas.style.cursor = 'crosshair';
     return;
   }
 
-  // 短押し => ラベル表示切替
+  // 短押し → ラベル表示切替
   const pos = getCirclePos(e);
-  let clickedCircle = circles.find(c=> isInCircle(pos,c));
+  let clickedCircle = circles.find(c => isInCircle(pos,c));
   if(clickedCircle) {
     clickedCircle.showText = !clickedCircle.showText;
     redrawCircleCanvas();
   }
 });
 
+// リセット（円を全消去）
 function resetCircleCanvas() {
   circles = [];
   currentLabel = '';
@@ -569,41 +571,39 @@ function resetCircleCanvas() {
 // ラベル選択
 document.getElementById('labelSelector').addEventListener('change',(e)=>{
   currentLabel = e.target.value;
-  // 同一ラベルの重複禁止
-  if(currentLabel && circles.some(c=> c.label===currentLabel)) {
+  if(currentLabel && circles.some(c=> c.label === currentLabel)) {
     alert('このラベルは既に使用されています');
     e.target.value = '';
     currentLabel = '';
   }
 });
 
+// CSV出力
 function exportCircleData() {
   if(circles.length !== 3) {
     alert('円を3つ作成してからCSV出力してください。');
     return;
   }
-  // px→mm換算に基づく計算
+  // px→mm換算
   // 半径(mm) = circle.radius * mmPerPx
   // 面積(mm²) = π * (radius(mm))^2
   // 距離(mm) = pxDistance * mmPerPx
 
-  // 3つの円同士の距離
   const dist = [
     calcDistance(circles[0], circles[1]),
     calcDistance(circles[1], circles[2]),
     calcDistance(circles[0], circles[2])
   ];
-  const distMM = dist.map(d=> (d*mmPerPx).toFixed(2));
+  const distMM = dist.map(d => (d*mmPerPx).toFixed(2));
 
   const areas = circles.map(c=>{
     const rMM = c.radius*mmPerPx;
-    return (Math.PI*rMM*rMM).toFixed(2); // mm²
+    return (Math.PI*rMM*rMM).toFixed(2);
   });
-  const radiiMM = circles.map(c=> (c.radius*mmPerPx).toFixed(2));
+  const radiiMM = circles.map(c => (c.radius*mmPerPx).toFixed(2));
 
-  // CSV行
   const header = 'ラベル,半径(mm),面積(mm²),過去-現在距離(mm),現在-未来距離(mm),過去-未来距離(mm)';
-  // （過去・現在・未来の順に並べたい場合はソートなどが必要。ここでは配列順に出力）
+  // この例では [0,1,2] の順で出力
   const row1 = `${circles[0].label},${radiiMM[0]},${areas[0]},${distMM[0]},${distMM[1]},${distMM[2]}`;
   const row2 = `${circles[1].label},${radiiMM[1]},${areas[1]},,,`;
   const row3 = `${circles[2].label},${radiiMM[2]},${areas[2]},,,`;
@@ -620,29 +620,29 @@ function calcDistance(c1, c2) {
   return Math.hypot(c1.x - c2.x, c1.y - c2.y);
 }
 
-async function saveCircleImage(){
-  // ラベル強制表示
-  const originalShow = circles.map(c=>c.showText);
-  circles.forEach(c=> c.showText=true);
+// 画像保存
+async function saveCircleImage() {
+  // ラベルを一時的に強制表示
+  const originalShow = circles.map(c => c.showText);
+  circles.forEach(c => c.showText = true);
   redrawCircleCanvas();
 
-  await new Promise(res=> setTimeout(res,100));
+  await new Promise(res => setTimeout(res, 100));
   html2canvas(document.querySelector('.a4-sheet'), {
     scale: 2,
     useCORS: true
   }).then(canvas => {
     const link = document.createElement('a');
     link.download = `circle_test_${new Date().toISOString().slice(0,10)}.jpg`;
-    link.href = canvas.toDataURL('image/jpeg',0.9);
+    link.href = canvas.toDataURL('image/jpeg', 0.9);
     link.click();
 
     // 元に戻す
-    circles.forEach((c,i)=> c.showText=originalShow[i]);
+    circles.forEach((c,i) => c.showText = originalShow[i]);
     redrawCircleCanvas();
   });
 }
 
-// 初期表示ステップは1
 </script>
 </body>
 </html>
