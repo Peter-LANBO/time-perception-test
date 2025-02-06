@@ -92,6 +92,12 @@
       position: relative;
       background: #fff;
     }
+    /* 将“キャンバス”标签放置在绘图区域上方（不在框内） */
+    .canvas-label-outside {
+      font-size: 14px;
+      color: #ccc;
+      margin-bottom: 5px;
+    }
     #circleCanvas {
       width: 100%;
       height: 100%;
@@ -148,9 +154,10 @@
   <!-- Step 1: 1回目キャリブレーション -->
   <div id="step1" class="step">
     <div class="note">
+      <!-- 修改为“定規”，并要求打勾 -->
       <label>
         <input type="checkbox" id="rulerCheck" required>
-        物理定規を準備しました（キャリブレーション用）
+        定規を準備しました（キャリブレーション用）
       </label>
     </div>
     <h2>【ステップ1】2cmキャリブレーション（1回目）</h2>
@@ -169,6 +176,7 @@
     <div class="canvas-box">
       <canvas id="calibCanvas2" width="800" height="500"></canvas>
     </div>
+    <!-- 点击【リセット】时清空校准数据并返回 Step1 -->
     <button class="btn" id="clearCalib2">リセット</button>
     <button class="btn" id="confirmCalib2">確定</button>
   </div>
@@ -192,7 +200,7 @@
           </ul>
         </div>
         
-        <!-- 将“ラベル選択”、“結果出力”、“リセット”的控制面板移至说明文字之上 -->
+        <!-- 将控制面板移至说明文字上方 -->
         <div class="control-panel">
           <select id="labelSelector">
             <option value="">ラベルを選択</option>
@@ -215,8 +223,12 @@
         </p>
       </div>
 
-      <div class="draw-container">
-        <canvas id="circleCanvas"></canvas>
+      <div>
+        <!-- 将“キャンバス”标签移出绘图区域，置于其上方 -->
+        <div class="canvas-label-outside">キャンバス</div>
+        <div class="draw-container">
+          <canvas id="circleCanvas"></canvas>
+        </div>
       </div>
     </div>
   </div>
@@ -242,8 +254,11 @@
   let currentLabel = '';
   let selectedCircle = null;
   const CANVAS_SIZE = 800;
-  // 为方便导出时调用更新函数，将圆画布的更新函数设为全局变量（后续在 initCircleCanvas 中赋值）
+  // 为方便导出时调用更新函数，将圆画布的更新函数设为全局变量
   let updateCircleDisplay = null;
+
+  // 为防止绘制新圆后 click 事件误触切换显示，增加标记
+  let justCreated = false;
 
   // 自定义模态窗口实现：customAlert 和 customConfirm
   function showModal(message, options = {confirmOnly: true}) {
@@ -315,7 +330,7 @@
 
     async startDrawing(e) {
       if (currentStep === 1 && !document.getElementById('rulerCheck').checked) {
-        await customAlert('定規の準備を確認してください');
+        await customAlert('定規のチェックボックスにチェックを入れてください');
         return;
       }
       const pos = this.getPosition(e);
@@ -404,6 +419,14 @@
     initCircleCanvas();
   });
 
+  // 修改【リセット】按钮：仅清空 circles 数组、清空标签选择并调用 updateCircleDisplay()
+  function resetCircleCanvas() {
+    circles = [];
+    document.getElementById('labelSelector').value = '';
+    currentLabel = '';
+    if(updateCircleDisplay) updateCircleDisplay();
+  }
+
   // サークルテスト功能
   function initCircleCanvas() {
     const canvas = document.getElementById('circleCanvas');
@@ -418,6 +441,7 @@
     let isDrawing = false;
     let actionType = null;
     let pressTimer = null;
+    let justCreated = false; // 标记刚创建完的圆
 
     function getPosition(e) {
       const rect = canvas.getBoundingClientRect();
@@ -427,22 +451,16 @@
       };
     }
 
+    // 不限制圆超出画布
     function enforceBoundary(circle) {
-      const maxRadius = Math.min(
-        circle.x - 5,
-        CANVAS_SIZE - circle.x - 5,
-        circle.y - 5,
-        CANVAS_SIZE - circle.y - 5
-      );
-      circle.radius = Math.min(circle.radius, maxRadius);
       return circle;
     }
 
     // 将 updateDisplay 函数设为全局变量，便于导出时调用
     updateCircleDisplay = function updateDisplay() {
       ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-      drawGrid();
-      
+      // 不绘制网格线
+
       // 绘制预览（如果正在绘制新圆）
       if (isDrawing && currentCircle) {
         ctx.beginPath();
@@ -460,7 +478,7 @@
         ctx.lineWidth = 2;
         ctx.stroke();
         
-        // 如果当前设置为显示标签，则绘制标签
+        // 仅在用户点击后显示标签
         if (c.showLabel) {
           ctx.fillStyle = '#2c3e50';
           ctx.font = '16px sans-serif';
@@ -473,49 +491,20 @@
       document.getElementById('circleCounter').textContent = `作成済み：${circles.length}/3`;
     };
 
-    function drawGrid() {
-      ctx.strokeStyle = '#ecf0f1';
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= CANVAS_SIZE; i += 40) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, CANVAS_SIZE);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(CANVAS_SIZE, i);
-        ctx.stroke();
-      }
-    }
-
-    // 监听鼠标按下事件（用于新建圆或启动现有圆的拖动／尺寸调整）
+    // 监听鼠标按下事件
     canvas.addEventListener('mousedown', e => {
       const pos = getPosition(e);
       
-      // 新建圆：只有在选择了标签且当前创建的圆数量不足3时生效
-      if (currentLabel && circles.length < 3) {
-        isDrawing = true;
-        currentCircle = enforceBoundary({
-          x: pos.x,
-          y: pos.y,
-          radius: 0,
-          label: currentLabel,
-          showLabel: true
-        });
-        return;
-      }
-
-      // 查找点击的已有圆（用于拖动或尺寸调整）
+      // 先检测是否点击到已有圆
       selectedCircle = circles.find(c => {
         const dist = Math.hypot(pos.x - c.x, pos.y - c.y);
         return dist < c.radius + 5;
       });
-
+      
       if (selectedCircle) {
         const edgeDist = Math.abs(
           Math.hypot(pos.x - selectedCircle.x, pos.y - selectedCircle.y) - selectedCircle.radius
         );
-        
         if (edgeDist < 10) {
           actionType = 'resize';
         } else {
@@ -524,6 +513,19 @@
             canvas.style.cursor = 'move';
           }, 1500);
         }
+        return;  // 若点击到已有圆，则不创建新圆
+      }
+      
+      // 若未点击到已有圆，则创建新圆（要求已选择标签且当前数量少于3）
+      if (currentLabel && circles.length < 3) {
+        isDrawing = true;
+        currentCircle = enforceBoundary({
+          x: pos.x,
+          y: pos.y,
+          radius: 0,
+          label: currentLabel,
+          showLabel: false   // 新建时不显示标签
+        });
       }
     });
 
@@ -545,10 +547,8 @@
       }
 
       if (actionType === 'move' && selectedCircle) {
-        selectedCircle.x = Math.max(selectedCircle.radius + 5, 
-          Math.min(pos.x, CANVAS_SIZE - selectedCircle.radius - 5));
-        selectedCircle.y = Math.max(selectedCircle.radius + 5, 
-          Math.min(pos.y, CANVAS_SIZE - selectedCircle.radius - 5));
+        selectedCircle.x = pos.x;
+        selectedCircle.y = pos.y;
         updateCircleDisplay();
       }
     });
@@ -561,6 +561,8 @@
           circles.push(currentCircle);
           document.getElementById('labelSelector').value = '';
           currentLabel = '';
+          justCreated = true;
+          setTimeout(() => { justCreated = false; }, 300);
         }
         isDrawing = false;
         currentCircle = null;
@@ -572,10 +574,9 @@
       updateCircleDisplay();
     });
 
-    // 新增“点击”事件，实现单击圆切换标签显示/隐藏
+    // “点击”事件：仅在非绘制状态且非刚创建状态下切换标签显示
     canvas.addEventListener('click', e => {
-      // 如果正在绘制或处于拖动状态，则不响应点击事件
-      if (isDrawing || actionType) return;
+      if (isDrawing || actionType || justCreated) return;
       const pos = getPosition(e);
       const clickedCircle = circles.find(c => Math.hypot(pos.x - c.x, pos.y - c.y) <= c.radius);
       if (clickedCircle) {
@@ -594,11 +595,10 @@
       }
     });
 
-    // 初次绘制
     updateCircleDisplay();
   }
 
-  // 数据输出功能
+  // 数据输出功能（保持不变）
   async function handleExport() {
     if (circles.length !== 3) {
       await customAlert('3つの円を作成してください');
@@ -608,20 +608,16 @@
     const confirmResult = await customConfirm('この結果を出力しますか？');
     if (!confirmResult) return;
     
-    // 退出全屏模式（确保输出前退出全屏）
     if (document.fullscreenElement) {
       await document.exitFullscreen();
     }
 
-    // 为确保导出的图片中显示标签，无论当前状态如何，
-    // 暂时保存各圆的原始 showLabel 状态，并全部设为 true
     const originalShowLabel = circles.map(c => c.showLabel);
     circles.forEach(c => c.showLabel = true);
     if (updateCircleDisplay) updateCircleDisplay();
 
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     
-    // CSV 文件输出
     const distances = [
       calcDistance(circles[0], circles[1]),
       calcDistance(circles[1], circles[2]),
@@ -647,7 +643,6 @@
     csvLink.download = `サークルテスト_${timestamp}.csv`;
     csvLink.click();
 
-    // 图片（JPG）输出：使用 html2canvas 导出绘图区域（包含标签）
     const canvasElem = await html2canvas(document.querySelector('.draw-container'), {
       scale: 2,
       useCORS: true
@@ -658,26 +653,13 @@
     imgLink.download = `サークルテスト_${timestamp}.jpg`;
     imgLink.click();
 
-    // 恢复各圆原始的标签显示状态，并重绘
     circles.forEach((c, i) => c.showLabel = originalShowLabel[i]);
     if (updateCircleDisplay) updateCircleDisplay();
   }
 
-  // 工具函数
   function calcDistance(c1, c2) {
     return Math.hypot(c1.x - c2.x, c1.y - c2.y);
   }
-
-  function resetCircleCanvas() {
-    circles = [];
-    document.getElementById('labelSelector').value = '';
-    currentLabel = '';
-    initCircleCanvas();
-  }
-
-  // 初始化：清空按钮绑定
-  document.getElementById('clearCalib1').addEventListener('click', () => calib1.clear());
-  document.getElementById('clearCalib2').addEventListener('click', () => calib2.clear());
 </script>
 </body>
 </html>
