@@ -196,7 +196,7 @@
             <li>ラベル選択後、キャンバスをドラッグで円作成（最大3つ）</li>
             <li>円を<strong>単クリック</strong>：ラベルの表示／非表示切替</li>
             <li>円周をドラッグ：サイズ変更</li>
-            <li>円内部を1.5秒長押し後ドラッグ：移動</li>
+            <li>円内部を長押ししながらドラッグ：移動</li>
           </ul>
         </div>
         
@@ -256,9 +256,6 @@
   const CANVAS_SIZE = 800;
   // 为方便导出时调用更新函数，将圆画布的更新函数设为全局变量
   let updateCircleDisplay = null;
-
-  // 为防止绘制新圆后 click 事件误触切换显示，增加标记
-  let justCreated = false;
 
   // 自定义模态窗口实现：customAlert 和 customConfirm
   function showModal(message, options = {confirmOnly: true}) {
@@ -461,7 +458,7 @@
       ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
       // 不绘制网格线
 
-      // 绘制预览（如果正在绘制新圆）
+           // 绘制预览（如果正在绘制新圆）
       if (isDrawing && currentCircle) {
         ctx.beginPath();
         ctx.arc(currentCircle.x, currentCircle.y, currentCircle.radius, 0, Math.PI * 2);
@@ -487,20 +484,20 @@
           ctx.fillText(c.label, c.x, c.y);
         }
       });
-      
+
       document.getElementById('circleCounter').textContent = `作成済み：${circles.length}/3`;
     };
 
     // 监听鼠标按下事件
     canvas.addEventListener('mousedown', e => {
       const pos = getPosition(e);
-      
+
       // 先检测是否点击到已有圆
       selectedCircle = circles.find(c => {
         const dist = Math.hypot(pos.x - c.x, pos.y - c.y);
         return dist < c.radius + 5;
       });
-      
+
       if (selectedCircle) {
         const edgeDist = Math.abs(
           Math.hypot(pos.x - selectedCircle.x, pos.y - selectedCircle.y) - selectedCircle.radius
@@ -508,14 +505,15 @@
         if (edgeDist < 10) {
           actionType = 'resize';
         } else {
-          pressTimer = setTimeout(() => {
-            actionType = 'move';
-            canvas.style.cursor = 'move';
-          }, 1500);
+          actionType = 'move';
+          // 计算鼠标点击位置和圆心之间的偏移量
+          selectedCircle.offsetX = pos.x - selectedCircle.x;
+          selectedCircle.offsetY = pos.y - selectedCircle.y;
+          canvas.style.cursor = 'move';
         }
         return;  // 若点击到已有圆，则不创建新圆
       }
-      
+
       // 若未点击到已有圆，则创建新圆（要求已选择标签且当前数量少于3）
       if (currentLabel && circles.length < 3) {
         isDrawing = true;
@@ -532,7 +530,7 @@
     // 鼠标移动事件
     canvas.addEventListener('mousemove', e => {
       const pos = getPosition(e);
-      
+
       if (isDrawing) {
         currentCircle.radius = Math.hypot(pos.x - currentCircle.x, pos.y - currentCircle.y);
         enforceBoundary(currentCircle);
@@ -547,15 +545,16 @@
       }
 
       if (actionType === 'move' && selectedCircle) {
-        selectedCircle.x = pos.x;
-        selectedCircle.y = pos.y;
+        // 使用偏移量来调整圆的位置
+        selectedCircle.x = pos.x - selectedCircle.offsetX;
+        selectedCircle.y = pos.y - selectedCircle.offsetY;
         updateCircleDisplay();
       }
     });
 
     canvas.addEventListener('mouseup', () => {
       clearTimeout(pressTimer);
-      
+
       if (isDrawing) {
         if (currentCircle.radius > 10) {
           circles.push(currentCircle);
@@ -567,7 +566,7 @@
         isDrawing = false;
         currentCircle = null;
       }
-      
+
       actionType = null;
       selectedCircle = null;
       canvas.style.cursor = 'default';
@@ -607,7 +606,7 @@
 
     const confirmResult = await customConfirm('この結果を出力しますか？');
     if (!confirmResult) return;
-    
+
     if (document.fullscreenElement) {
       await document.exitFullscreen();
     }
@@ -617,7 +616,7 @@
     if (updateCircleDisplay) updateCircleDisplay();
 
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    
+
     const distances = [
       calcDistance(circles[0], circles[1]),
       calcDistance(circles[1], circles[2]),
@@ -647,7 +646,7 @@
       scale: 2,
       useCORS: true
     });
-    
+
     const imgLink = document.createElement('a');
     imgLink.href = canvasElem.toDataURL('image/jpeg', 0.9);
     imgLink.download = `サークルテスト_${timestamp}.jpg`;
@@ -663,3 +662,4 @@
 </script>
 </body>
 </html>
+
