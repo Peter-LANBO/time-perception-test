@@ -92,7 +92,6 @@
       position: relative;
       background: #fff;
     }
-    /* 将“キャンバス”标签放置在绘图区域上方（不在框内） */
     .canvas-label-outside {
       font-size: 14px;
       color: #ccc;
@@ -110,7 +109,6 @@
       text-align: center;
       padding: 50px;
     }
-    /* 自定义模态窗口样式 */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -154,7 +152,6 @@
   <!-- Step 1: 1回目キャリブレーション -->
   <div id="step1" class="step">
     <div class="note">
-      <!-- 修改为“定規”，并要求打勾 -->
       <label>
         <input type="checkbox" id="rulerCheck" required>
         定規を準備しました（キャリブレーション用）
@@ -176,7 +173,6 @@
     <div class="canvas-box">
       <canvas id="calibCanvas2" width="800" height="500"></canvas>
     </div>
-    <!-- 点击【リセット】时清空校准数据并返回 Step1 -->
     <button class="btn" id="clearCalib2">リセット</button>
     <button class="btn" id="confirmCalib2">確定</button>
   </div>
@@ -188,7 +184,7 @@
     <div class="a4-sheet">
       <div class="instruction-panel">
         <p>以下の指示を詳しく読んで、回答してください：<br>
-        過去、現在、未来が円で表されると考えて、あなた自身の過去、現在、未来の関係について、あなたの見方を最もあらわすように、枠の中で自由に3つの円を書いてください、描き方は自由です。円のサイズと位置を変えてもかまいません。描き終わったら、円をクリックして過去、現在、未来か分かるようにしてください。</p>
+        過去、現在、未来が円で表されると考えて、あなた自身の過去、現在、未来の関係について、あなたの見方を最もあらわすように、枠の中で自由に3つの円を書いてください。描き方は自由です。円のサイズと位置を変えてもかまいません。描き終わったら、円をクリックして過去、現在、未来か分かるようにしてください。</p>
         
         <div class="note">
           <strong>操作ガイド</strong>
@@ -200,7 +196,6 @@
           </ul>
         </div>
         
-        <!-- 将控制面板移至说明文字上方 -->
         <div class="control-panel">
           <select id="labelSelector">
             <option value="">ラベルを選択</option>
@@ -224,7 +219,6 @@
       </div>
 
       <div>
-        <!-- 将“キャンバス”标签移出绘图区域，置于其上方 -->
         <div class="canvas-label-outside">キャンバス</div>
         <div class="draw-container">
           <canvas id="circleCanvas"></canvas>
@@ -235,7 +229,6 @@
 
 </div>
 
-<!-- 自定义模态窗口，用于替代 alert/confirm -->
 <div id="modalOverlay" class="modal-overlay">
   <div class="modal-content">
     <p id="modalMessage"></p>
@@ -246,7 +239,7 @@
 
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script>
-  // 全局变量
+  // 全局変数
   let currentStep = 0;
   let calibResults = [null, null];
   let pxToMm = 0;
@@ -254,10 +247,13 @@
   let currentLabel = '';
   let selectedCircle = null;
   const CANVAS_SIZE = 800;
-  // 为方便导出时调用更新函数，将圆画布的更新函数设为全局变量
   let updateCircleDisplay = null;
 
-  // 自定义模态窗口实现：customAlert 和 customConfirm
+  // タスク開始時間および前の円終了時間
+  let circleTestStartTime = 0;
+  let previousCircleEndTime = 0;
+
+  // カスタムモーダルウィンドウ
   function showModal(message, options = {confirmOnly: true}) {
     return new Promise(resolve => {
       const modalOverlay = document.getElementById('modalOverlay');
@@ -274,7 +270,6 @@
         modalCancel.style.display = 'inline-block';
       }
       
-      // 清除之前的事件监听
       modalOk.onclick = () => {
         modalOverlay.style.display = 'none';
         resolve(true);
@@ -294,21 +289,27 @@
     return await showModal(message, {confirmOnly: false});
   }
 
-  // 全屏模式
+  // フルスクリーンモード
   function enterFullscreen() {
     document.documentElement.requestFullscreen().then(() => {
       navigateTo(1);
     });
   }
 
-  // 步骤切换函数
+  // ステップ切り替え関数
   function navigateTo(step) {
     document.querySelectorAll('.step').forEach(el => el.style.display = 'none');
     document.getElementById(`step${step}`).style.display = 'block';
     currentStep = step;
+    if(step === 3) {
+      // サークルテスト開始時にタスク開始時間を記録
+      circleTestStartTime = performance.now();
+      previousCircleEndTime = circleTestStartTime;
+      initCircleCanvas();
+    }
   }
 
-  // キャリブレーション管理クラス
+  // キャリブレーションクラス
   class CalibrationCanvas {
     constructor(id) {
       this.canvas = document.getElementById(id);
@@ -319,7 +320,6 @@
     }
 
     initEvents() {
-      // 将 mousedown 处理函数声明为 async，以便使用 await customAlert
       this.canvas.addEventListener('mousedown', async e => await this.startDrawing(e));
       this.canvas.addEventListener('mousemove', e => this.draw(e));
       this.canvas.addEventListener('mouseup', () => this.stopDrawing());
@@ -382,7 +382,6 @@
     }
   }
 
-  // キャリブレーション处理
   const calib1 = new CalibrationCanvas('calibCanvas1');
   const calib2 = new CalibrationCanvas('calibCanvas2');
 
@@ -413,10 +412,9 @@
 
     pxToMm = 20 / ((calibResults[0] + calibResults[1]) / 2);
     navigateTo(3);
-    initCircleCanvas();
   });
 
-  // 修改【リセット】按钮：仅清空 circles 数组、清空标签选择并调用 updateCircleDisplay()
+  // リセットボタン：circles配列およびラベルのクリア
   function resetCircleCanvas() {
     circles = [];
     document.getElementById('labelSelector').value = '';
@@ -424,7 +422,7 @@
     if(updateCircleDisplay) updateCircleDisplay();
   }
 
-  // サークルテスト功能
+  // サークルテストの実装
   function initCircleCanvas() {
     const canvas = document.getElementById('circleCanvas');
     const ctx = canvas.getContext('2d');
@@ -437,8 +435,7 @@
     let currentCircle = null;
     let isDrawing = false;
     let actionType = null;
-    let pressTimer = null;
-    let justCreated = false; // 标记刚创建完的圆
+    let justCreated = false;
 
     function getPosition(e) {
       const rect = canvas.getBoundingClientRect();
@@ -448,17 +445,12 @@
       };
     }
 
-    // 不限制圆超出画布
     function enforceBoundary(circle) {
       return circle;
     }
 
-    // 将 updateDisplay 函数设为全局变量，便于导出时调用
     updateCircleDisplay = function updateDisplay() {
       ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-      // 不绘制网格线
-
-           // 绘制预览（如果正在绘制新圆）
       if (isDrawing && currentCircle) {
         ctx.beginPath();
         ctx.arc(currentCircle.x, currentCircle.y, currentCircle.radius, 0, Math.PI * 2);
@@ -467,15 +459,12 @@
         ctx.stroke();
         ctx.setLineDash([]);
       }
-
       circles.forEach(c => {
         ctx.beginPath();
         ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
         ctx.strokeStyle = '#2c3e50';
         ctx.lineWidth = 2;
         ctx.stroke();
-        
-        // 仅在用户点击后显示标签
         if (c.showLabel) {
           ctx.fillStyle = '#2c3e50';
           ctx.font = '16px sans-serif';
@@ -484,37 +473,27 @@
           ctx.fillText(c.label, c.x, c.y);
         }
       });
-
       document.getElementById('circleCounter').textContent = `作成済み：${circles.length}/3`;
     };
 
-    // 监听鼠标按下事件
     canvas.addEventListener('mousedown', e => {
       const pos = getPosition(e);
-
-      // 先检测是否点击到已有圆
       selectedCircle = circles.find(c => {
         const dist = Math.hypot(pos.x - c.x, pos.y - c.y);
         return dist < c.radius + 5;
       });
-
       if (selectedCircle) {
-        const edgeDist = Math.abs(
-          Math.hypot(pos.x - selectedCircle.x, pos.y - selectedCircle.y) - selectedCircle.radius
-        );
+        const edgeDist = Math.abs(Math.hypot(pos.x - selectedCircle.x, pos.y - selectedCircle.y) - selectedCircle.radius);
         if (edgeDist < 10) {
           actionType = 'resize';
         } else {
           actionType = 'move';
-          // 计算鼠标点击位置和圆心之间的偏移量
           selectedCircle.offsetX = pos.x - selectedCircle.x;
           selectedCircle.offsetY = pos.y - selectedCircle.y;
           canvas.style.cursor = 'move';
         }
-        return;  // 若点击到已有圆，则不创建新圆
+        return;
       }
-
-      // 若未点击到已有圆，则创建新圆（要求已选择标签且当前数量少于3）
       if (currentLabel && circles.length < 3) {
         isDrawing = true;
         currentCircle = enforceBoundary({
@@ -522,30 +501,31 @@
           y: pos.y,
           radius: 0,
           label: currentLabel,
-          showLabel: false   // 新建时不显示标签
+          showLabel: false,
+          modCount: 0,
+          positions: [],
+          startTime: performance.now()
         });
+        currentCircle.reactionTime = circles.length === 0 ? 
+          currentCircle.startTime - circleTestStartTime :
+          currentCircle.startTime - previousCircleEndTime;
       }
     });
 
-    // 鼠标移动事件
     canvas.addEventListener('mousemove', e => {
       const pos = getPosition(e);
-
-      if (isDrawing) {
+      if (isDrawing && currentCircle) {
         currentCircle.radius = Math.hypot(pos.x - currentCircle.x, pos.y - currentCircle.y);
+        currentCircle.positions.push({x: pos.x, y: pos.y, time: performance.now()});
         enforceBoundary(currentCircle);
         updateCircleDisplay();
         return;
       }
-
       if (actionType === 'resize' && selectedCircle) {
         selectedCircle.radius = Math.hypot(pos.x - selectedCircle.x, pos.y - selectedCircle.y);
-        enforceBoundary(selectedCircle);
         updateCircleDisplay();
       }
-
       if (actionType === 'move' && selectedCircle) {
-        // 使用偏移量来调整圆的位置
         selectedCircle.x = pos.x - selectedCircle.offsetX;
         selectedCircle.y = pos.y - selectedCircle.offsetY;
         updateCircleDisplay();
@@ -553,27 +533,38 @@
     });
 
     canvas.addEventListener('mouseup', () => {
-      clearTimeout(pressTimer);
-
-      if (isDrawing) {
-        if (currentCircle.radius > 10) {
-          circles.push(currentCircle);
-          document.getElementById('labelSelector').value = '';
-          currentLabel = '';
-          justCreated = true;
-          setTimeout(() => { justCreated = false; }, 300);
+      if (isDrawing && currentCircle) {
+        currentCircle.endTime = performance.now();
+        currentCircle.drawingTime = currentCircle.endTime - currentCircle.startTime;
+        let totalDistance = 0, maxSpeed = 0;
+        for (let i = 1; i < currentCircle.positions.length; i++) {
+          const dx = currentCircle.positions[i].x - currentCircle.positions[i-1].x;
+          const dy = currentCircle.positions[i].y - currentCircle.positions[i-1].y;
+          const dt = currentCircle.positions[i].time - currentCircle.positions[i-1].time;
+          const dist = Math.hypot(dx, dy);
+          totalDistance += dist;
+          const speed = dt > 0 ? dist / dt : 0;
+          if (speed > maxSpeed) maxSpeed = speed;
         }
+        currentCircle.totalDistance = totalDistance;
+        currentCircle.averageSpeed = currentCircle.drawingTime > 0 ? totalDistance / currentCircle.drawingTime : 0;
+        currentCircle.maxSpeed = maxSpeed;
+        circles.push(currentCircle);
+        previousCircleEndTime = currentCircle.endTime;
         isDrawing = false;
         currentCircle = null;
       }
-
+      if (actionType === 'move' || actionType === 'resize') {
+        if (selectedCircle) {
+          selectedCircle.modCount = (selectedCircle.modCount || 0) + 1;
+        }
+      }
       actionType = null;
       selectedCircle = null;
       canvas.style.cursor = 'default';
       updateCircleDisplay();
     });
 
-    // “点击”事件：仅在非绘制状态且非刚创建状态下切换标签显示
     canvas.addEventListener('click', e => {
       if (isDrawing || actionType || justCreated) return;
       const pos = getPosition(e);
@@ -584,7 +575,6 @@
       }
     });
 
-    // 监听标签选择框变化
     document.getElementById('labelSelector').addEventListener('change', async e => {
       currentLabel = e.target.value;
       if (circles.some(c => c.label === currentLabel)) {
@@ -597,7 +587,26 @@
     updateCircleDisplay();
   }
 
-  // 数据输出功能（保持不变）
+  // 時間関連性得点計算関数（単位：mm）【修正済み】  
+  // 修正点：追加で「一方の円が完全にもう一方の内側にある」条件を判定する。
+  function computeTemporalRelatedness(r1, r2, d) {
+    const tol = 1.0; // 許容範囲（mm）
+    // もし、一方の円がもう一方の完全内側にある場合
+    if (d + Math.min(r1, r2) <= Math.max(r1, r2) + tol) {
+      return 6;
+    }
+    // 円の境界がほぼ接触している場合
+    if (Math.abs(d - (r1 + r2)) <= tol) {
+      return 2;
+    }
+    // 境界が明確に離れている場合
+    if (d > (r1 + r2) + tol) {
+      return 0;
+    }
+    // それ以外は部分重なり
+    return 4;
+  }
+
   async function handleExport() {
     if (circles.length !== 3) {
       await customAlert('3つの円を作成してください');
@@ -611,31 +620,77 @@
       await document.exitFullscreen();
     }
 
+    // 全てのラベルを表示
     const originalShowLabel = circles.map(c => c.showLabel);
     circles.forEach(c => c.showLabel = true);
     if (updateCircleDisplay) updateCircleDisplay();
 
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 
-    const distances = [
-      calcDistance(circles[0], circles[1]),
-      calcDistance(circles[1], circles[2]),
-      calcDistance(circles[0], circles[2])
-    ].map(d => (d * pxToMm).toFixed(2));
+    // 各ラベルの円を特定
+    const circlePast = circles.find(c => c.label === '過去');
+    const circleNow = circles.find(c => c.label === '現在');
+    const circleFuture = circles.find(c => c.label === '未来');
+    const dPastNow = circlePast && circleNow ? Math.hypot(circlePast.x - circleNow.x, circlePast.y - circleNow.y) * pxToMm : '';
+    const dNowFuture = circleNow && circleFuture ? Math.hypot(circleNow.x - circleFuture.x, circleNow.y - circleFuture.y) * pxToMm : '';
+    const dPastFuture = circlePast && circleFuture ? Math.hypot(circlePast.x - circleFuture.x, circlePast.y - circleFuture.y) * pxToMm : '';
 
+    // 時間関連性得点計算
+    const rPast = circlePast ? circlePast.radius * pxToMm : 0;
+    const rNow = circleNow ? circleNow.radius * pxToMm : 0;
+    const rFuture = circleFuture ? circleFuture.radius * pxToMm : 0;
+    const trPastNow = circlePast && circleNow ? computeTemporalRelatedness(rPast, rNow, dPastNow) : '';
+    const trNowFuture = circleNow && circleFuture ? computeTemporalRelatedness(rNow, rFuture, dNowFuture) : '';
+    const trPastFuture = circlePast && circleFuture ? computeTemporalRelatedness(rPast, rFuture, dPastFuture) : '';
+    const totalTemporalRelatedness = (trPastNow !== '' ? trPastNow : 0) + (trNowFuture !== '' ? trNowFuture : 0) + (trPastFuture !== '' ? trPastFuture : 0);
+
+    // 時間優位性得点計算
+    let pastDominance = 0, nowDominance = 0, futureDominance = 0;
+    if (circlePast && circleNow) {
+      if (rPast / rNow >= 1.2) { pastDominance += 2; }
+      else if (rNow / rPast >= 1.2) { nowDominance += 2; }
+    }
+    if (circlePast && circleFuture) {
+      if (rPast / rFuture >= 1.2) { pastDominance += 2; }
+      else if (rFuture / rPast >= 1.2) { futureDominance += 2; }
+    }
+    if (circleNow && circleFuture) {
+      if (rNow / rFuture >= 1.2) { nowDominance += 2; }
+      else if (rFuture / rNow >= 1.2) { futureDominance += 2; }
+    }
+
+    // 全体タスク時間（ms）
+    const overallTaskTime = performance.now() - circleTestStartTime;
+
+    // CSV用データ作成（各円の情報）
     const csvData = circles.map((c, i) => ({
       ラベル: c.label,
-      半径mm: (c.radius * pxToMm).toFixed(2),
-      面積mm2: (Math.PI * Math.pow(c.radius * pxToMm, 2)).toFixed(2),
-      過去現在距離: i === 0 ? distances[0] : '',
-      現在未来距離: i === 1 ? distances[1] : '',
-      過去未来距離: i === 2 ? distances[2] : ''
+      半径_mm: (c.radius * pxToMm).toFixed(2),
+      面積_mm2: (Math.PI * Math.pow(c.radius * pxToMm, 2)).toFixed(2),
+      過去_現在距離_mm: c.label === '過去' && dPastNow !== '' ? dPastNow.toFixed(2) : (c.label === '現在' && dPastNow !== '' ? dPastNow.toFixed(2) : ''),
+      現在_未来距離_mm: c.label === '現在' && dNowFuture !== '' ? dNowFuture.toFixed(2) : (c.label === '未来' && dNowFuture !== '' ? dNowFuture.toFixed(2) : ''),
+      過去_未来距離_mm: c.label === '過去' && dPastFuture !== '' ? dPastFuture.toFixed(2) : (c.label === '未来' && dPastFuture !== '' ? dPastFuture.toFixed(2) : ''),
+      描画順: i + 1,
+      反応時間_ms: c.reactionTime ? c.reactionTime.toFixed(2) : '',
+      描画時間_ms: c.drawingTime ? c.drawingTime.toFixed(2) : '',
+      修正回数: c.modCount !== undefined ? c.modCount : 0,
+      総移動距離_px: c.totalDistance !== undefined ? c.totalDistance.toFixed(2) : '',
+      平均速度_px_ms: c.averageSpeed !== undefined ? c.averageSpeed.toFixed(4) : '',
+      最大速度_px_ms: c.maxSpeed !== undefined ? c.maxSpeed.toFixed(4) : ''
     }));
 
-    const csvContent = [
-      'ラベル,半径(mm),面積(mm²),過去-現在距離(mm),現在-未来距離(mm),過去-未来距離(mm)',
-      ...csvData.map(d => `${d.ラベル},${d.半径mm},${d.面積mm2},${d.過去現在距離},${d.現在未来距離},${d.過去未来距離}`)
-    ].join('\n');
+    // CSVヘッダー（全て日本語）
+    const header = 'ラベル,半径(mm),面積(mm²),過去-現在距離(mm),現在-未来距離(mm),過去-未来距離(mm),描画順,反応時間(ms),描画時間(ms),修正回数,総移動距離(px),平均速度(px/ms),最大速度(px/ms)';
+    const csvRows = csvData.map(d => `${d.ラベル},${d.半径_mm},${d.面積_mm2},${d.過去_現在距離_mm},${d.現在_未来距離_mm},${d.過去_未来距離_mm},${d.描画順},${d.反応時間_ms},${d.描画時間_ms},${d.修正回数},${d.総移動距離_px},${d.平均速度_px_ms},${d.最大速度_px_ms}`);
+    
+    // 追加の統計データ（サマリ行）
+    const summaryRows = [
+      `全体タスク時間(ms):,${overallTaskTime.toFixed(2)}`,
+      `時間関連性_過去-現在,時間関連性_現在-未来,時間関連性_過去-未来,総時間関連性:,${trPastNow},${trNowFuture},${trPastFuture},${totalTemporalRelatedness}`,
+      `時間優位性_過去,時間優位性_現在,時間優位性_未来:,${pastDominance},${nowDominance},${futureDominance}`
+    ];
+    
+    const csvContent = [header, ...csvRows, '', ...summaryRows].join('\n');
 
     const csvLink = document.createElement('a');
     csvLink.href = URL.createObjectURL(new Blob([csvContent], {type: 'text/csv;charset=utf-8;'}));
@@ -655,11 +710,6 @@
     circles.forEach((c, i) => c.showLabel = originalShowLabel[i]);
     if (updateCircleDisplay) updateCircleDisplay();
   }
-
-  function calcDistance(c1, c2) {
-    return Math.hypot(c1.x - c2.x, c1.y - c2.y);
-  }
 </script>
 </body>
 </html>
-
